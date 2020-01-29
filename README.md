@@ -2,9 +2,7 @@
 
 ## What is this?
 
-`go-change-ref` change references to specific Go symbols (Type, Function, Variable...) in your project to another.
-
-This tool will help you with refactoring your project when you want to move a definition to another package.
+`go-change-ref` changes all references to specific Go symbols (Type, Function, Variable...) in your project to another. This tool will be especially useful for changing package organization during refactoring.
 
 ## Install
 
