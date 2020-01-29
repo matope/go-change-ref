@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 type mapPresenter map[string]string
 
-func (p mapPresenter) resultPresenter(fname, content string) error {
+func (p mapPresenter) writeContent(fname, content string) error {
 	if _, ok := p[fname]; ok {
 		return errors.New("filename duplication occured")
 	}
@@ -130,11 +131,11 @@ func main() {
 }
 
 func TestProcess(t *testing.T) {
-	for _, c := range cases {
-		t.Run(c.testname, func(t *testing.T) {
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("%d:%s", i, c.testname), func(t *testing.T) {
 			param := c.param
 			presenter := mapPresenter{}
-			param.resultPresenter = presenter.resultPresenter
+			param.resultPresenter = presenter
 			if err := process(&param); err != nil {
 				t.Fatal(err)
 			}
