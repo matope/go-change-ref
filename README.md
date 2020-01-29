@@ -13,28 +13,39 @@ This tool will help you with refactoring your project when you want to move a de
 `github.com/matope/go-change-ref/example/pkg1/pkg2.go`
 
 ```go
-package pkg1
+package main
 
-import "github.com/matope/go-change-ref/example/pkg2"
+import (
+	"fmt"
+
+	"github.com/matope/go-change-ref/example/pkg2"
+)
 
 func main() {
- var t1 = pkg2.T1
- fmt.Println(t1)
+	var t2 pkg2.T2
+	fmt.Println(t2)
 }
 ```
 
 ```
 $ go install github.com/matope/go-change-ref
-$ go-change-ref -from github.com/matope/go-change-ref/example/pkg2.T1 -to github.com/matope/go-change-ref/example/pkg3.T2 ./...
+$ go-change-ref -w \
+    -from github.com/matope/go-change-ref/example/pkg2.T2 \
+    -to   github.com/matope/go-change-ref/example/pkg3.T3 \
+    ./...
 ```
 
 ```go
-package pkg1
+package main
 
-import "github.com/matope/go-change-ref/example/pkg3"
+import (
+	"fmt"
+
+	"github.com/matope/go-change-ref/example/pkg3"
+)
 
 func main() {
- var t1 = pkg3.T2
- fmt.Println(t1)
+	var t2 pkg3.T3
+	fmt.Println(t2)
 }
 ```
