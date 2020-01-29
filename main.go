@@ -114,7 +114,7 @@ func parseParamters() (*parameters, error) {
 	}, nil
 }
 
-func loadToPkg(path string) (*packages.Package, error) {
+func loadPkg(path string) (*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName,
 	}
@@ -127,7 +127,7 @@ func loadToPkg(path string) (*packages.Package, error) {
 }
 
 func process(param *parameters) error {
-	toPkg, err := loadToPkg(param.toPkgPath)
+	toPkg, err := loadPkg(param.toPkgPath)
 	if err != nil {
 		return err
 	}
@@ -197,20 +197,8 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 	// Do not overwrite receiver of method.
 	// Here, attempting to delete idents which are receivers of methods.
 	if fromLocal {
-		for _, astFile := range pkg.Syntax {
-			for _, decl := range astFile.Decls {
-				if fd, ok := decl.(*ast.FuncDecl); ok {
-					if fd.Recv != nil {
-						recvType := fd.Recv.List[0].Type
-						if starExp, ok := recvType.(*ast.StarExpr); ok {
-							recvType = starExp.X
-						}
-						if ident, ok := recvType.(*ast.Ident); ok {
-							delete(usedIdents, ident)
-						}
-					}
-				}
-			}
+		for _, receiverIdent := range findReceiversOfMethodDecl(pkg) {
+			delete(usedIdents, receiverIdent)
 		}
 	}
 
@@ -321,6 +309,26 @@ func findImportScope(impts []*types.Package, pkgPath string) *types.Scope {
 		}
 	}
 	return nil
+}
+
+func findReceiversOfMethodDecl(pkg *packages.Package) []*ast.Ident {
+	idents := make([]*ast.Ident, 0)
+	for _, astFile := range pkg.Syntax {
+		for _, decl := range astFile.Decls {
+			if fd, ok := decl.(*ast.FuncDecl); ok {
+				if fd.Recv != nil {
+					recvType := fd.Recv.List[0].Type
+					if starExp, ok := recvType.(*ast.StarExpr); ok {
+						recvType = starExp.X
+					}
+					if ident, ok := recvType.(*ast.Ident); ok {
+						idents = append(idents, ident)
+					}
+				}
+			}
+		}
+	}
+	return idents
 }
 
 func buildImportPathMap(pkg *packages.Package, astFile *ast.File) map[string]string {
