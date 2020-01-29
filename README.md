@@ -6,11 +6,15 @@
 
 This tool will help you with refactoring your project when you want to move a definition to another package.
 
-## For example
+## Install
 
-(this demo does not work)
+```
+$ go install github.com/matope/go-change-ref
+```
 
-`github.com/matope/go-change-ref/example/pkg1/pkg2.go`
+## How to use
+
+### Before
 
 ```go
 package main
@@ -27,13 +31,15 @@ func main() {
 }
 ```
 
+### Run
 ```
-$ go install github.com/matope/go-change-ref
 $ go-change-ref -w \
     -from github.com/matope/go-change-ref/example/pkg2.T2 \
     -to   github.com/matope/go-change-ref/example/pkg3.T3 \
     ./...
 ```
+
+### After
 
 ```go
 package main
