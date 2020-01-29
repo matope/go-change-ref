@@ -6,7 +6,9 @@
 
 This tool will help you with refactoring your project when you want to move a definition to another package.
 
-## How to use.
+## For example
+
+(this demo does not work)
 
 `github.com/matope/go-change-ref/example/pkg1/pkg2.go`
 

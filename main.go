@@ -23,8 +23,11 @@ type parameters struct {
 	fromPkgPath, fromName string
 	toPkgPath, toName     string
 	dir                   string
-	overwrite             bool
+	resultPresenter       resultPresenter
+	overlay               map[string][]byte
 }
+
+type resultPresenter func(fname, content string) error
 
 func main() {
 	param, err := parseParamters()
@@ -56,13 +59,26 @@ func parseParamters() (*parameters, error) {
 	}
 	toPkgPath, toName := (*flagTo)[:pos], (*flagTo)[pos+1:]
 
+	var presenter resultPresenter
+	if *flagOverwrite {
+		presenter = func(fname, content string) error {
+			return ioutil.WriteFile(fname, []byte(content), 0666)
+		}
+	} else {
+		presenter = func(fname, content string) error {
+			fmt.Printf("file: %s", fname)
+			_, err := fmt.Println(content)
+			return err
+		}
+	}
+
 	return &parameters{
-		fromPkgPath: fromPkgPath,
-		fromName:    fromName,
-		toPkgPath:   toPkgPath,
-		toName:      toName,
-		dir:         flag.Arg(0),
-		overwrite:   *flagOverwrite,
+		fromPkgPath:     fromPkgPath,
+		fromName:        fromName,
+		toPkgPath:       toPkgPath,
+		toName:          toName,
+		dir:             flag.Arg(0),
+		resultPresenter: presenter,
 	}, nil
 }
 
@@ -75,7 +91,8 @@ func process(param *parameters) error {
 			packages.NeedTypes |
 			packages.LoadAllSyntax |
 			packages.NeedTypesInfo,
-		Tests: true,
+		Tests:   true,
+		Overlay: param.overlay,
 	}
 
 	pkgs, err := packages.Load(cfg, param.dir)
@@ -149,25 +166,20 @@ func processPackage(pkg *packages.Package, params *parameters) error {
 		}
 	}
 
-	var nodeFilter func(cr *astutil.Cursor) bool
+	var nodeFilter func(node ast.Node) bool
 	if fromLocal {
 		// if from is local, find Ident nodes which are using target.
-		nodeFilter = func(cr *astutil.Cursor) bool {
-			if ident, ok := cr.Node().(*ast.Ident); ok {
-				if _, ok := usedIdents[ident]; !ok {
-					return false
-				}
-				if fd, ok := cr.Parent().(*ast.FuncDecl); ok {
-					return fd.Recv == nil // if the Ident is
-				}
-				return true
+		nodeFilter = func(node ast.Node) bool {
+			if ident, ok := node.(*ast.Ident); ok {
+				_, ok := usedIdents[ident]
+				return ok
 			}
 			return false
 		}
 	} else {
 		// if from is not local, find selectorsnodes whose selector is using target.
-		nodeFilter = func(cr *astutil.Cursor) bool {
-			if selector, ok := cr.Node().(*ast.SelectorExpr); ok {
+		nodeFilter = func(node ast.Node) bool {
+			if selector, ok := node.(*ast.SelectorExpr); ok {
 				_, ok := usedIdents[selector.Sel]
 				return ok
 			}
@@ -189,9 +201,8 @@ func processPackage(pkg *packages.Package, params *parameters) error {
 		updated := false
 		for i := range astFile.Decls {
 			_ = astutil.Apply(astFile.Decls[i], func(cr *astutil.Cursor) bool {
-				if nodeFilter(cr) {
-					//log.Printf("%s: ident:%q is using %q\n", pkg.Fset.Position(ident.Pos()).String(), ident.String(), target.Name())
-					log.Printf("found:%q", pkg.Fset.Position(cr.Node().Pos()))
+				if nodeFilter(cr.Node()) {
+					log.Printf("%s", pkg.Fset.Position(cr.Node().Pos()))
 					cr.Replace(replacedNode)
 					updated = true
 				}
@@ -219,12 +230,8 @@ func processPackage(pkg *packages.Package, params *parameters) error {
 		}
 
 		fname := pkg.Fset.Position(astFile.Pos()).Filename
-		fmt.Println("filename:", fname)
-
-		if params.overwrite {
-			ioutil.WriteFile(fname, b, 0666)
-		} else {
-			fmt.Printf("%s", b)
+		if err := params.resultPresenter(fname, string(b)); err != nil {
+			return err
 		}
 	}
 	return nil
