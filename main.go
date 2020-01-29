@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/printer"
+	"go/token"
 	"go/types"
 	"io/ioutil"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -169,57 +173,103 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 	var target types.Object
 	if fromLocal {
 		target = pkg.Types.Scope().Lookup(params.fromName)
-		if target == nil {
-			return fmt.Errorf("pkgPath:%q name:%q not found locally.", params.fromPkgPath, params.fromName)
-		}
+		//if target == nil {
+		//	return fmt.Errorf("pkgPath:%q name:%q not found locally.", params.fromPkgPath, params.fromName)
+		//}
 	} else {
-		scope := findImportScope(pkg.Types.Imports(), params.fromPkgPath)
-		if scope == nil {
-			return nil
+		if scope := findImportScope(pkg.Types.Imports(), params.fromPkgPath); scope != nil {
+			target = scope.Lookup(params.fromName)
 		}
-		target = scope.Lookup(params.fromName)
-		if target == nil {
-			return fmt.Errorf("name:%q not found in package:%q.", params.fromName, params.fromPkgPath)
-		}
+		//if target == nil {
+		//	return fmt.Errorf("name:%q not found in package:%q.", params.fromName, params.fromPkgPath)
+		//}
 	}
-	if target == nil {
-		return nil
-	}
+	//if target == nil {
+	//	return nil
+	//}
 
 	// records Idents that using target.
-	var usedIdents = make(map[*ast.Ident]struct{})
+	var targetIdents = make(map[*ast.Ident]struct{})
 	for ident, use := range pkg.TypesInfo.Uses {
 		if use == target {
-			usedIdents[ident] = struct{}{}
+			targetIdents[ident] = struct{}{}
 		}
+	}
+
+	// record Used/Defs idents. This map is used for find "unused" idents.
+	var usedIndents = make(map[*ast.Ident]struct{})
+	for ident := range pkg.TypesInfo.Uses {
+		usedIndents[ident] = struct{}{}
+	}
+	for ident := range pkg.TypesInfo.Defs {
+		usedIndents[ident] = struct{}{}
 	}
 
 	// Do not overwrite receiver of method.
 	// Here, attempting to delete idents which are receivers of methods.
 	if fromLocal {
 		for _, receiverIdent := range findReceiversOfMethodDecl(pkg) {
-			delete(usedIdents, receiverIdent)
+			delete(targetIdents, receiverIdent)
 		}
 	}
 
+	// setup nodeFilter.
 	var nodeFilter func(node ast.Node) bool
 	if fromLocal {
 		// if from is local, find Ident nodes which are using target.
-		nodeFilter = func(node ast.Node) bool {
-			if ident, ok := node.(*ast.Ident); ok {
-				_, ok := usedIdents[ident]
-				return ok
+		if target != nil {
+			nodeFilter = func(node ast.Node) bool {
+				if ident, ok := node.(*ast.Ident); ok {
+					_, ok := targetIdents[ident]
+					return ok
+				}
+				return false
 			}
-			return false
+		} else {
+			var selectorIdents = make(map[*ast.Ident]struct{})
+			nodeFilter = func(node ast.Node) bool {
+				if selector, ok := node.(*ast.SelectorExpr); ok {
+					selectorIdents[selector.Sel] = struct{}{}
+					if xident, ok := selector.X.(*ast.Ident); ok {
+						selectorIdents[xident] = struct{}{}
+					}
+				}
+				if ident, ok := node.(*ast.Ident); ok {
+					if _, ok := selectorIdents[ident]; ok {
+						return false
+					}
+					if _, ok := usedIndents[ident]; !ok {
+						return true
+					}
+				}
+				return false
+			}
 		}
 	} else {
-		// if from is not local, find selectorsnodes whose selector is using target.
-		nodeFilter = func(node ast.Node) bool {
-			if selector, ok := node.(*ast.SelectorExpr); ok {
-				_, ok := usedIdents[selector.Sel]
-				return ok
+		if target != nil {
+			nodeFilter = func(node ast.Node) bool {
+				if selector, ok := node.(*ast.SelectorExpr); ok {
+					_, ok := targetIdents[selector.Sel]
+					return ok
+				}
+				return false
 			}
-			return false
+		} else {
+			pkgName := filepath.Base(params.fromPkgPath)
+			// if from is not local, find selectorsnodes whose selector is using target.
+			nodeFilter = func(node ast.Node) bool {
+				if selector, ok := node.(*ast.SelectorExpr); ok {
+					if _, ok := usedIndents[selector.Sel]; !ok {
+						if xident, ok := selector.X.(*ast.Ident); ok && xident.Name == pkgName && selector.Sel.Name == params.fromName {
+							//log.Printf("unused selector:%s, sel.sel.obj:%#v, sel.x:%#v", node, selector.Sel.Obj, selector.X)
+							return true
+						}
+					}
+					_, ok := targetIdents[selector.Sel]
+					return ok
+				}
+				return false
+			}
 		}
 	}
 
@@ -263,7 +313,9 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 		for i := range astFile.Decls {
 			_ = astutil.Apply(astFile.Decls[i], func(cr *astutil.Cursor) bool {
 				if nodeFilter(cr.Node()) {
-					log.Printf("%s", pkg.Fset.Position(cr.Node().Pos()))
+					position := pkg.Fset.Position(cr.Node().Pos())
+					line, _ := readaline(position)
+					fmt.Printf("%s %q\n", position, line)
 					cr.Replace(replacedNode)
 					updated = true
 				}
@@ -349,4 +401,21 @@ func buildImportPathMap(pkg *packages.Package, astFile *ast.File) map[string]str
 		m[path] = pkgName
 	}
 	return m
+}
+
+func readaline(pos token.Position) (string, error) {
+	f, err := os.Open(pos.Filename)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	line := 0
+	for scanner.Scan() {
+		line++
+		if line == pos.Line {
+			return scanner.Text(), nil
+		}
+	}
+	return "", scanner.Err()
 }
