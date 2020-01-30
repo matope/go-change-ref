@@ -209,17 +209,20 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 		} else {
 			var selectorIdents = make(map[*ast.Ident]struct{})
 			nodeFilter = func(node ast.Node) bool {
+				// mark selectorIdents.
 				if selector, ok := node.(*ast.SelectorExpr); ok {
 					selectorIdents[selector.Sel] = struct{}{}
 					if xident, ok := selector.X.(*ast.Ident); ok {
 						selectorIdents[xident] = struct{}{}
 					}
 				}
+
 				if ident, ok := node.(*ast.Ident); ok {
+					// if the ident was an Sel or X of a SelectorXpr already visited, skip it.
 					if _, ok := selectorIdents[ident]; ok {
 						return false
 					}
-					if _, ok := usedIdents[ident]; !ok {
+					if _, ok := usedIdents[ident]; !ok && ident.Name == params.fromName {
 						return true
 					}
 				}
