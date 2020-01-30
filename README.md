@@ -12,6 +12,8 @@ $ go install github.com/matope/go-change-ref
 
 ## How to use
 
+In case you moved a type definition pkg2.T2 to pkg3.T3.
+
 ### Before
 
 ```go
@@ -45,11 +47,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/matope/go-change-ref/example/pkg3"
+	"github.com/matope/go-change-ref/example/pkg3" // UPDATED.
 )
 
 func main() {
-	var t2 pkg3.T3
+	var t2 pkg3.T3 // UPDATED.
 	fmt.Println(t2)
 }
 ```
