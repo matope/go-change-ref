@@ -71,7 +71,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Parameter:%+v\n", params)
+
+	fmt.Printf("dir:%s\n", params.dir)
+	fmt.Printf("from package: %q, symbol:%q\n", params.fromPkgPath, params.fromName)
+	fmt.Printf("to   package: %q, symbol:%q", params.toPkgName, params.toPkgName)
+	if params.toPkgName != "" {
+		fmt.Printf(" (package name if duplication: %q)", params.toPkgName)
+	}
+	fmt.Printf("\n\n")
 
 	if err := process(params); err != nil {
 		log.Fatal(err)
