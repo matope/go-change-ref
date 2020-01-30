@@ -191,7 +191,7 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 
 	// records Idents that using target.
 	targetIdents := findTargetIdents(pkg, target, fromLocal)
-	usedIndents := findUsesDefsIdents(pkg)
+	usedIdents := findUsesDefsIdents(pkg)
 
 	// setup nodeFilter.
 	var nodeFilter func(node ast.Node) bool
@@ -219,7 +219,7 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 					if _, ok := selectorIdents[ident]; ok {
 						return false
 					}
-					if _, ok := usedIndents[ident]; !ok {
+					if _, ok := usedIdents[ident]; !ok {
 						return true
 					}
 				}
@@ -240,7 +240,7 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 			// if from is not local, find selectorsnodes whose selector is using target.
 			nodeFilter = func(node ast.Node) bool {
 				if selector, ok := node.(*ast.SelectorExpr); ok {
-					if _, ok := usedIndents[selector.Sel]; !ok {
+					if _, ok := usedIdents[selector.Sel]; !ok {
 						if xident, ok := selector.X.(*ast.Ident); ok && xident.Name == pkgName && selector.Sel.Name == params.fromName {
 							//log.Printf("unused selector:%s, sel.sel.obj:%#v, sel.x:%#v", node, selector.Sel.Obj, selector.X)
 							return true
