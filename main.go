@@ -180,42 +180,16 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 		if scope := findImportScope(pkg.Types.Imports(), params.fromPkgPath); scope != nil {
 			target = scope.Lookup(params.fromName)
 		}
-		//if target == nil {
-		//	return fmt.Errorf("name:%q not found in package:%q.", params.fromName, params.fromPkgPath)
-		//}
 	}
-	//if target == nil {
-	//	return nil
-	//}
 
 	// records Idents that using target.
-	var targetIdents = make(map[*ast.Ident]struct{})
-	for ident, use := range pkg.TypesInfo.Uses {
-		if use == target {
-			targetIdents[ident] = struct{}{}
-		}
-	}
-
-	// record Used/Defs idents. This map is used for find "unused" idents.
-	var usedIndents = make(map[*ast.Ident]struct{})
-	for ident := range pkg.TypesInfo.Uses {
-		usedIndents[ident] = struct{}{}
-	}
-	for ident := range pkg.TypesInfo.Defs {
-		usedIndents[ident] = struct{}{}
-	}
-
-	// Do not overwrite receiver of method.
-	// Here, attempting to delete idents which are receivers of methods.
-	if fromLocal {
-		for _, receiverIdent := range findReceiversOfMethodDecl(pkg) {
-			delete(targetIdents, receiverIdent)
-		}
-	}
+	targetIdents := findTargetIdents(pkg, target, fromLocal)
+	usedIndents := findUsesDefsIdents(pkg)
 
 	// setup nodeFilter.
 	var nodeFilter func(node ast.Node) bool
 	if fromLocal {
+
 		// if from is local, find Ident nodes which are using target.
 		if target != nil {
 			nodeFilter = func(node ast.Node) bool {
@@ -315,7 +289,7 @@ func processPackage(pkg *packages.Package, params *parameters, toPkg *packages.P
 				if nodeFilter(cr.Node()) {
 					position := pkg.Fset.Position(cr.Node().Pos())
 					line, _ := readaline(position)
-					fmt.Printf("%s %q\n", position, line)
+					fmt.Printf("%s %s\n", position, line)
 					cr.Replace(replacedNode)
 					updated = true
 				}
@@ -361,6 +335,36 @@ func findImportScope(impts []*types.Package, pkgPath string) *types.Scope {
 		}
 	}
 	return nil
+}
+
+func findUsesDefsIdents(pkg *packages.Package) map[*ast.Ident]struct{} {
+	var usedIdents = make(map[*ast.Ident]struct{})
+	for ident := range pkg.TypesInfo.Uses {
+		usedIdents[ident] = struct{}{}
+	}
+	for ident := range pkg.TypesInfo.Defs {
+		usedIdents[ident] = struct{}{}
+	}
+	return usedIdents
+}
+
+func findTargetIdents(pkg *packages.Package, target types.Object, fromLocal bool) map[*ast.Ident]struct{} {
+	var targetIdents = make(map[*ast.Ident]struct{})
+	for ident, use := range pkg.TypesInfo.Uses {
+		if use == target {
+			targetIdents[ident] = struct{}{}
+		}
+	}
+
+	// Do not overwrite receiver of method.
+	// Here, attempting to delete idents which are receivers of methods.
+	if fromLocal {
+		for _, receiverIdent := range findReceiversOfMethodDecl(pkg) {
+			delete(targetIdents, receiverIdent)
+		}
+	}
+
+	return targetIdents
 }
 
 func findReceiversOfMethodDecl(pkg *packages.Package) []*ast.Ident {
