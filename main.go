@@ -74,7 +74,7 @@ func main() {
 
 	fmt.Printf("dir:%s\n", params.dir)
 	fmt.Printf("from package: %q, symbol:%q\n", params.fromPkgPath, params.fromName)
-	fmt.Printf("to   package: %q, symbol:%q", params.toPkgName, params.toPkgName)
+	fmt.Printf("to   package: %q, symbol:%q", params.toPkgPath, params.toName)
 	if params.toPkgName != "" {
 		fmt.Printf(" (package name if duplication: %q)", params.toPkgName)
 	}
